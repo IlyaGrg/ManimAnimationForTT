@@ -1,0 +1,12 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Рендеры manim (кэш, частичные файлы, tex/svg)
+media/
+
+# Готовые видео
+*.mp4
+*.mov
+*.gif
