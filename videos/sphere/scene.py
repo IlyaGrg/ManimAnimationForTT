@@ -15,11 +15,12 @@ RHO_COLOR = GREEN
 
 PHI = 66 * DEGREES
 THETA = -90 * DEGREES
-ZOOM = 1.15
+ZOOM = 1.0
 FRAME_CENTER = [0, 0, 1.5]
+FOCAL = 200  # большое — почти без перспективы, плоскость остаётся параллелограммом
 
-R = 1.45            # радиус полушария и цилиндра
-LX, RX = -1.8, 1.8  # центры оснований тел
+R = 1.4             # радиус полушария и цилиндра
+LX, RX = -1.75, 1.75  # центры оснований тел
 BIG_R = 2.0         # шар во вступлении
 BIG_Z = 2.4         # высота центра шара во вступлении
 LIFT_Z = 4.3        # куда поднимаем срезы
@@ -105,7 +106,8 @@ class SphereVolume(ThreeDScene):
     def construct(self):
         self.caption = None
         self.title = None
-        self.set_camera_orientation(phi=PHI, theta=THETA, zoom=ZOOM, frame_center=FRAME_CENTER)
+        self.set_camera_orientation(phi=PHI, theta=THETA, zoom=ZOOM, frame_center=FRAME_CENTER,
+                                    focal_distance=FOCAL)
         self.hook()
         self.ball()
         self.bodies()
@@ -139,14 +141,18 @@ class SphereVolume(ThreeDScene):
         spin = lambda m, dt: m.rotate(0.4 * dt, axis=OUT, about_point=c)
 
         self.play(FadeIn(ball, scale=0.6), run_time=1.5)
-        ball.add_updater(spin)
         r_line = Line(c, c + BIG_R * RIGHT, color=R_COLOR, stroke_width=6)
         r_label = self.fixed(MathTex("r", color=R_COLOR, font_size=64))
-        r_label.move_to(self.screen(c + BIG_R * RIGHT / 2) + UP * 0.35)
+        r_label.move_to(self.screen(r_line.get_center()) + UP * 0.35)
         self.remove(r_label)
         self.set_caption("Шар радиуса r", Create(r_line), Write(r_label))
-        self.wait(1.5)
-        ball.clear_updaters()
+        # Радиус крутится вместе с шаром, подпись едет за его серединой
+        ball.add_updater(spin)
+        r_line.add_updater(spin)
+        r_label.add_updater(lambda m: m.move_to(self.screen(r_line.get_center()) + UP * 0.35))
+        self.wait(2.5)
+        for mob in (ball, r_line, r_label):
+            mob.clear_updaters()
 
         floor = Circle(radius=BIG_R, stroke_width=2, stroke_color=BLUE_A,
                        fill_color=BLUE_E, fill_opacity=0.85).move_to(c)
@@ -170,7 +176,7 @@ class SphereVolume(ThreeDScene):
         hb, cb = np.array([LX, 0, 0]), np.array([RX, 0, 0])
         lines = VGroup(
             Line(hb, hb + R * RIGHT),
-            Line(cb + R * UP + R * OUT, cb + R * RIGHT + R * OUT),
+            Line(cb + R * OUT, cb + R * RIGHT + R * OUT),
             Line(cb + R * LEFT, cb + R * LEFT + R * OUT),
         ).set_stroke(R_COLOR, 6)
         labels = VGroup(
@@ -188,9 +194,11 @@ class SphereVolume(ThreeDScene):
     def slices(self):
         h = ValueTracker(0.6 * R)
 
-        plane = always_redraw(lambda: Rectangle(
-            width=8.4, height=3.6, stroke_color=H_COLOR, stroke_width=2,
-            fill_color=H_COLOR, fill_opacity=0.12).move_to([0, 0, h.get_value()]))
+        # Параллелограмм с видимыми краями — сразу читается как плоскость в пространстве
+        plane = always_redraw(lambda: Polygon(
+            [-3.6, -1.7, 0], [2.9, -1.7, 0], [3.6, 1.7, 0], [-2.9, 1.7, 0],
+            stroke_color=H_COLOR, stroke_width=3,
+            fill_color=H_COLOR, fill_opacity=0.15).shift(OUT * h.get_value()))
         cut_l = always_redraw(lambda: hemi_slice(h.get_value()))
         cut_r = always_redraw(lambda: cyl_slice(h.get_value()))
 
@@ -256,10 +264,13 @@ class SphereVolume(ThreeDScene):
         self.add(up_l, up_r)
 
         label_y = self.screen([0, 0, LIFT_Z])[1] - R * LIFT_SCALE * ZOOM - 0.55
-        s1 = MathTex(r"\pi", r"\rho^2", font_size=56).move_to([self.screen([LX, 0, 0])[0], label_y, 0])
+        s1 = MathTex(r"\pi", r"\rho^2", font_size=50).move_to([self.screen([LX, 0, 0])[0], label_y, 0])
         s1[1].set_color(RHO_COLOR)
-        s1_full = MathTex(r"\pi", "(", "r^2", "-", "h^2", ")", font_size=56).move_to(s1)
-        s2 = MathTex(r"\pi", "r^2", "-", r"\pi", "h^2", font_size=56).move_to([self.screen([RX, 0, 0])[0], label_y, 0])
+        s1_full = MathTex(r"\pi", "(", "r^2", "-", "h^2", ")", font_size=50).move_to(s1)
+        s2 = MathTex(r"\pi", "r^2", "-", r"\pi", "h^2", font_size=50).move_to([self.screen([RX, 0, 0])[0], label_y, 0])
+        # Скобки делают левую часть выше — выравниваем обе части по символу π
+        s2.shift(UP * (s1_full[0].get_y() - s2[0].get_y()))
+        s1.shift(UP * (s1_full[0].get_y() - s1[0].get_y()))
         self.fixed(s1, s2)
         self.remove(s1, s2)
         self.set_caption("Слева круг, справа кольцо")
@@ -270,7 +281,7 @@ class SphereVolume(ThreeDScene):
         self.play(Write(s2))
         self.wait(0.6)
 
-        eq = self.fixed(MathTex("=", font_size=72).move_to([0, label_y, 0]))
+        eq = self.fixed(MathTex("=", font_size=72).move_to([0, s1_full[0].get_y(), 0]))
         self.remove(eq)
         self.set_caption("Площади равны!", Write(eq))
         self.play(Indicate(s1_full), Indicate(s2))
@@ -308,16 +319,19 @@ class SphereVolume(ThreeDScene):
         self.play(Write(line1[:3]), FadeIn(cyl_note), Indicate(self.cyl, color=CYL_COLOR))
         # Конус вынимаем из цилиндра — это и есть «минус»
         self.play(self.cone.animate.shift(OUT * 1.9), run_time=1.2)
-        self.play(Write(line1[3:]), FadeIn(cone_note))
+        self.play(Write(line1[3:]))
         self.wait(0.6)
         self.play(FadeOut(self.cone, shift=OUT * 0.5))
-        self.wait(0.4)
+        self.play(FadeIn(cone_note, shift=UP * 0.1))
+        self.wait(0.6)
 
         line2 = self.fixed(MathTex(r"V_{\frac12}", "=", r"\tfrac{2}{3}", r"\pi r^3", font_size=80).move_to(line1))
         line2[0].set_color(HEMI_COLOR)
         self.remove(line2)
         self.set_caption("Упрощаем", FadeOut(VGroup(cyl_note, cone_note)))
-        self.play(TransformMatchingTex(line1, line2))
+        self.play(FadeOut(line1[2:], shift=UP * 0.15), run_time=0.7)
+        self.play(ReplacementTransform(line1[:2], line2[:2]),
+                  FadeIn(line2[2:], shift=UP * 0.15), run_time=1.1)
         self.wait(1)
 
         line3 = self.fixed(MathTex("V", "=", "2", r"\cdot", r"\tfrac{2}{3}", r"\pi r^3", "=",
